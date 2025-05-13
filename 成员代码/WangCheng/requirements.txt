@@ -1,4 +1,4 @@
-pipcryptography==44.0.3
+cryptography==44.0.3
 ecdsa==0.19.1
 Flask==3.1.0
 flask_cors==5.0.1

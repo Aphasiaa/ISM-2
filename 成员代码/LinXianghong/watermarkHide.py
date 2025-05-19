@@ -84,7 +84,14 @@ def embed_watermark(watermark_array, dwt_coeffs, alpha=80):
     return dwt_coeffs_watermarked
 
 # 主函数：完成水印嵌入的整个流程
-def embed_watermark_to_image(image_name, watermark_name, output_name):
+def embed_watermark_to_image(image_name, watermark_name, output_name, alpha=80):
+    """
+    将水印嵌入到图像中
+    :param image_name: 原始图像文件名
+    :param watermark_name: 水印图像文件名
+    :param output_name: 输出图像文件名
+    :param alpha: 水印嵌入强度，默认值为80
+    """
     try:
         # 读取原始图像(RGB)和水印图像(灰度)
         image_array = convert_image(image_name, 4096, False)
@@ -95,7 +102,7 @@ def embed_watermark_to_image(image_name, watermark_name, output_name):
         b_channel = image_array[:,:,2]
         
         dwt_coeffs = process_dwt(r_channel)
-        dwt_coeffs_watermarked = embed_watermark(watermark_array, dwt_coeffs)
+        dwt_coeffs_watermarked = embed_watermark(watermark_array, dwt_coeffs, alpha)
         
         r_channel_watermarked = pywt.waverec2(dwt_coeffs_watermarked, 'haar')
         r_channel_watermarked = np.clip(r_channel_watermarked, 0, 255)

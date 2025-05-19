@@ -6,7 +6,7 @@ import pywt
 from scipy.fftpack import dct, idct
  
 # 转换图像为numpy数组
-# is_watermark为True时转为灰度图，False时保持RGB格式
+# is_watermark为True时转为灰度图，False时保持   RGB格式      
 def convert_image(image_name, size, is_watermark=False):
     img_path = os.path.join('./pictures', image_name)
     img = Image.open(img_path).resize((size, size), Image.Resampling.LANCZOS)

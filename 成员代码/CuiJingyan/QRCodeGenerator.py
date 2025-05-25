@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import qrcode
 from io import BytesIO
 import base64
+import magic
 
 from PIL import Image
 import numpy
@@ -66,6 +67,22 @@ def adjust_create_time(original_str):
 def allowed_file(filename):
     return '.' in filename and \
         filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+        
+def is_image(file_bytes: bytes) -> bool:
+    """
+    使用 python-magic 检测文件 MIME 类型并且使用 PIL 做二次验证
+    """
+    try:
+        mime = magic.from_buffer(file_bytes, mime=True)
+        if not mime.startswith('image/'):
+            return False
+
+        # 使用 PIL 验证文件结构
+        img = Image.open(io.BytesIO(file_bytes))
+        img.verify()
+        return True
+    except Exception:
+        return False
 
 def read_qr_code(filepath):
     try:
@@ -97,6 +114,8 @@ def home():
 
         if file:
             file_data = file.read()
+            if not is_image(file_data):
+                return "不是合法文件"
             qr_text = read_qr_code(base64.b64encode(file_data).decode("utf-8"))
             if qr_text:
                 return redirect(url_for('show_image', filename='pic', qr_text=qr_text))

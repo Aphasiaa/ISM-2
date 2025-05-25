@@ -2,10 +2,12 @@ from flask import Flask, render_template, request, redirect, url_for, Response
 import os
 from werkzeug.utils import secure_filename
 import cv2
+from typing import Optional
 from datetime import datetime, timedelta
 import qrcode
 from io import BytesIO
 import base64
+from qrcode.image.pil import PilImage
 
 from PIL import Image
 import numpy
@@ -20,7 +22,10 @@ app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}  
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  
 
-def generate_qr_code(data, version=5, box_size=10, border=4):
+def generate_qr_code(data: str,
+                     version: int = 5,
+                     box_size: int = 10,
+                     border: int = 4) -> PilImage:
     """
     生成二维码图片
     :param data: 要编码的字符串
@@ -39,44 +44,46 @@ def generate_qr_code(data, version=5, box_size=10, border=4):
     qr.make(fit=True)
     return qr.make_image(fill_color="black", back_color="white")
 
-def adjust_create_time(original_str):
+def adjust_create_time(original_str: str) -> str:
+    """
+    将 URL 参数中的 createTime 增加 1 小时
+    :param original_str: 原始带参数字符串
+    :return: 调整后的字符串
+    """
     try:
         parts = original_str.split('&')
-
-        for i in range(len(parts)):
-            if parts[i].startswith('createTime='):
-                
-                _, time_value = parts[i].split('=', 1)
-
+        for idx, part in enumerate(parts):
+            if part.startswith('createTime='):
+                _, time_value = part.split('=', 1)
                 dt = datetime.strptime(time_value, "%Y-%m-%dT%H:%M:%S.%f")
-
                 dt += timedelta(hours=1)
-
-                new_time = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]  
-
-                parts[i] = f"createTime={new_time}"
+                new_time = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+                parts[idx] = f"createTime={new_time}"
                 break
-
         return '&'.join(parts)
 
     except Exception as e:
         print(f"处理失败: {str(e)}")
         return original_str  
 
-def allowed_file(filename):
+def allowed_file(filename: str) -> str :
     return '.' in filename and \
         filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-def read_qr_code(filepath):
+def read_qr_code(file_bytes: bytes) -> Optional[str]:
+    """
+    解析上传文件中的二维码
+    :param file_bytes: 上传文件的二进制数据
+    :return: 解码后的字符串，失败返回 None
+    """
     try:
-        img_bytes = base64.b64decode(filepath)
-        image = Image.open(io.BytesIO(img_bytes))
+        if len(file_bytes) > app.config['MAX_CONTENT_LENGTH']:
+            raise ValueError("文件过大")
+        image = Image.open(io.BytesIO(file_bytes))
         img = cv2.cvtColor(numpy.asarray(image), cv2.COLOR_RGB2BGR)
-        detect_obj = cv2.wechat_qrcode_WeChatQRCode()
-        res = detect_obj.detectAndDecode(img)
-        if res[0]:
-            return res[0]  
-        return None
+        detector = cv2.wechat_qrcode_WeChatQRCode()
+        data, _, _ = detector.detectAndDecode(img)
+        return data or None
     except Exception as e:
         print(f"二维码解析失败: {str(e)}")
         return None

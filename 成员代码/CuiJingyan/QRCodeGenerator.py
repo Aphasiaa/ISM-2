@@ -28,6 +28,19 @@ logging.basicConfig(level=logging.INFO)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+def generate_qr_code(data: str,
+                     version: int = 5,
+                     box_size: int = 10,
+                     border: int = 4) -> PilImage:
+    """
+    生成二维码图片
+    :param data: 要编码的字符串
+    :param version: 二维码复杂度 (1-40)
+    :param box_size: 每个小格子的像素数
+    :param border: 边框宽度（单位：格子数）
+    :return: PIL Image 对象
+    """
+
 def generate_qr_code(data, version=5, box_size=10, border=4):
     qr = qrcode.QRCode(
         version=version,
@@ -38,6 +51,13 @@ def generate_qr_code(data, version=5, box_size=10, border=4):
     qr.add_data(data)
     qr.make(fit=True)
     return qr.make_image(fill_color="black", back_color="white")
+
+def adjust_create_time(original_str: str) -> str:
+    """
+    将 URL 参数中的 createTime 增加 1 小时
+    :param original_str: 原始带参数字符串
+    :return: 调整后的字符串
+    """
 
 def adjust_qr_createtime_param(original_str):
     try:
@@ -55,9 +75,24 @@ def adjust_qr_createtime_param(original_str):
         print(f"处理失败: {str(e)}")
         return original_str  
 
-def allowed_file(filename):
+def allowed_file(filename: str) -> bool:
     return '.' in filename and \
         filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+def read_qr_code(file_bytes: bytes) -> Optional[str]:
+    """
+    解析上传文件中的二维码
+    :param file_bytes: 上传文件的二进制数据
+    :return: 解码后的字符串，失败返回 None
+    """
+    try:
+        if len(file_bytes) > app.config['MAX_CONTENT_LENGTH']:
+            raise ValueError("文件过大")
+        image = Image.open(io.BytesIO(file_bytes))
+        img = cv2.cvtColor(numpy.asarray(image), cv2.COLOR_RGB2BGR)
+        detector = cv2.wechat_qrcode_WeChatQRCode()
+        data, _, _ = detector.detectAndDecode(img)
+        return data or None
         
 def is_image(file_bytes: bytes) -> bool:
     """
@@ -111,6 +146,7 @@ def home():
 
         if file:
             file_data = file.read()
+            qr_text = read_qr_code(file_data)
             if not is_image(file_data):
                 return "不是合法文件"
             qr_text = read_qr_code(base64.b64encode(file_data).decode("utf-8"))
@@ -154,7 +190,7 @@ def show_image(filename):
         return "二维码生成失败", 500
 
 # --- 启动区 ---
-if __name__ == '__main__':
+if __name__ == '____':
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
     app.run(debug=True)

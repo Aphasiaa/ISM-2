@@ -7,6 +7,9 @@ from bs4 import BeautifulSoup
 import time
 import random
 from datetime import datetime
+from typing import List, Dict, Optional
+import logging
+import validators 
 
 # 定义一个爬虫类
 class SimpleSpider:
@@ -29,32 +32,58 @@ class SimpleSpider:
         self.timeout = 10
         # 设置重试次数
         self.max_retries = 3
-        
-    def get_page(self, url):
-        """
-        获取网页内容
-        参数：
-            url: 要访问的网页地址
-        返回：
-            网页内容或错误信息
-        """
-        # 重试机制
-        for i in range(self.max_retries):
-            try:
-                # 发送GET请求
-                response = requests.get(url, headers=self.headers, timeout=self.timeout)
-                # 检查响应状态
-                response.raise_for_status()
-                # 设置编码
-                response.encoding = 'utf-8'
+
+    def get_page(self, url: str) -> Optional[str]:
+        """新增类型注解和详细错误日志"""
+        try:
+            response = requests.get(url, headers=self.headers, timeout=self.timeout)
+            response.encoding = 'utf-8'
+            return response.text
+        except requests.RequestException as e:
+            self.logger.error(f"Request failed: {e}", exc_info=True)
+            return None
+    def crawl(self, url: str, depth: int = 1) -> List[Dict]:
+    """递归爬取页面"""
+    if depth == 0:
+        return []
+    
+    html = self.get_page(url)
+    results = self.parse_page(html)
+    
+    for link in results[:5]:  # 限制子页面数量
+        results.extend(self.crawl(link['url'], depth-1))
+    return results
+    def save_results(self, results: List[Dict], format: str = 'txt'):
+        """支持多格式保存"""
+        if format == 'json':
+            import json
+            with open('results.json', 'w') as f:
+                json.dump(results, f, indent=2)
+        def get_page(self, url):
+            """
+            获取网页内容
+            参数：
+                url: 要访问的网页地址
+            返回：
+                网页内容或错误信息
+            """
+            # 重试机制
+            for i in range(self.max_retries):
+                try:
+                    # 发送GET请求
+                    response = requests.get(url, headers=self.headers, timeout=self.timeout)
+                    # 检查响应状态
+                    response.raise_for_status()
+                    # 设置编码
+                    response.encoding = 'utf-8'
                 return response.text
-            except Exception as e:
-                print(f"第{i+1}次请求失败: {str(e)}")
-                if i < self.max_retries - 1:
-                    # 随机等待一段时间后重试
-                    time.sleep(random.uniform(1, 3))
-                else:
-                    return None
+                except Exception as e:
+                    print(f"第{i+1}次请求失败: {str(e)}")
+                    if i < self.max_retries - 1:
+                        # 随机等待一段时间后重试
+                        time.sleep(random.uniform(1, 3))
+                    else:
+                        return None
     
     def parse_page(self, html):
         """

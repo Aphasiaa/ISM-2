@@ -9,6 +9,7 @@ from PIL import Image
 import cv2
 import numpy as np
 import qrcode
+import magic
 
 # --- 配置区 ---
 UPLOAD_FOLDER = 'static/uploads'
@@ -51,6 +52,28 @@ def adjust_qr_createtime_param(original_str):
                 break
         return '&'.join(parts)
     except Exception as e:
+        print(f"处理失败: {str(e)}")
+        return original_str  
+
+def allowed_file(filename):
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+        
+def is_image(file_bytes: bytes) -> bool:
+    """
+    使用 python-magic 检测文件 MIME 类型并且使用 PIL 做二次验证
+    """
+    try:
+        mime = magic.from_buffer(file_bytes, mime=True)
+        if not mime.startswith('image/'):
+            return False
+
+        # 使用 PIL 验证文件结构
+        img = Image.open(io.BytesIO(file_bytes))
+        img.verify()
+        return True
+    except Exception:
+        return False
         app.logger.error(f"创建时间调整失败: {str(e)}")
         return original_str
 
@@ -86,6 +109,15 @@ def home():
         if not allowed_file(file.filename):
             return "文件类型不合法"
 
+        if file:
+            file_data = file.read()
+            if not is_image(file_data):
+                return "不是合法文件"
+            qr_text = read_qr_code(base64.b64encode(file_data).decode("utf-8"))
+            if qr_text:
+                return redirect(url_for('show_image', filename='pic', qr_text=qr_text))
+            else:
+                return "未检测到二维码或读取失败"
         file_data = file.read()
         encoded_data = base64.b64encode(file_data).decode("utf-8")
         qr_text = read_qr_code_from_base64(encoded_data)

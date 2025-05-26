@@ -45,6 +45,8 @@ def hash_algorithm(algorithm, plaintext):
     elif algorithm == "PBKDF2":
         salt = get_random_bytes(16)
         return PBKDF2(plaintext, salt, dkLen=32).hex()
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")  # 新增验证
 
 # 编码算法
 def encode_algorithm(algorithm, plaintext):
@@ -52,6 +54,8 @@ def encode_algorithm(algorithm, plaintext):
         return base64.b64encode(plaintext.encode()).decode('utf-8')
     elif algorithm == "UTF-8":
         return plaintext.encode('utf-8').decode('utf-8')
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
 # 解码算法
 def decode_algorithm(algorithm, ciphertext):
@@ -59,6 +63,9 @@ def decode_algorithm(algorithm, ciphertext):
         return base64.b64decode(ciphertext).decode('utf-8')
     elif algorithm == "UTF-8":
         return ciphertext.encode('utf-8').decode('utf-8')
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+
 
 # RSA 密钥生成 (1024bit)
 def generate_rsa_key():
@@ -283,142 +290,251 @@ def aes_decrypt(key, ciphertext):
     return decrypted_plaintext.decode('utf-8')
 
 def encrypt(algorithm, data):
+
+    def check(a, b):
+        if not all([a,b]):
+            raise ValueError("Missing required parameters")
+        
     if algorithm == "AES":
         key = data.get('key')
         plaintext = data.get('plaintext')
+        check(key,plaintext)
         return aes_encrypt(key, plaintext)
     elif algorithm == "SM4":
         key = data.get('key')
         plaintext = data.get('plaintext')
+        check(key,plaintext)
         return sm4_encrypt(key, plaintext)
     elif algorithm == "RC6":
         key = data.get('key')
         plaintext = data.get('plaintext')
+        check(key,plaintext)
         return rc6_encrypt(key, plaintext)
     elif algorithm == "RSA":
         public_key = data.get('publickey')
         plaintext = data.get('plaintext')
+        check(public_key,plaintext)
         return rsa_encrypt(public_key, plaintext)
     elif algorithm == "ECC":
         public_key = data.get('publickey')
+        plaintext = data.get('plaintext')
+        check(public_key,plaintext)
         public_key = serialization.load_pem_public_key(
             public_key.encode('utf-8'),
             backend=default_backend()
         )
-        plaintext = data.get('plaintext').encode()
+        plaintext=plaintext.encode()
         return ecc_encrypt(public_key, plaintext)
+    # 使用异常处理机制
     else:
-        return "Unsupported algorithm"
+        raise ValueError(f"Unsupported algorithm: {algorithm}") 
 
 def decrypt(algorithm, data):
+
+    def check(a, b):
+        if not all([a,b]):
+            raise ValueError("Missing required parameters")
+        
     if algorithm == "AES":
         key = data.get('key')
-        ciphertext = base64.b64decode(data.get('ciphertext'))
+        ciphertext = data.get('ciphertext')
+        check(key, ciphertext)
+        ciphertext = base64.b64decode(ciphertext)
         return aes_decrypt(key, ciphertext)
     elif algorithm == "SM4":
         key = data.get('key')
         ciphertext = data.get('ciphertext')
+        check(key, ciphertext)
         return sm4_decrypt(key, ciphertext)
     elif algorithm == "RC6":
         key = data.get('key')
         ciphertext = data.get('ciphertext')
+        check(key, ciphertext)
         return rc6_decrypt(key, ciphertext)
     elif algorithm == "RSA":
         private_key = data.get('privatekey')
         ciphertext = data.get('ciphertext')
+        check(private_key, ciphertext)
         return rsa_decrypt(private_key, ciphertext)
     elif algorithm == "ECC":
         private_key = data.get('privatekey')
+        ciphertext = data.get('ciphertext')
+        check(private_key, ciphertext)
         private_key = serialization.load_pem_private_key(
             private_key.encode('utf-8'),
             password=None,
             backend=default_backend()
         )
-        ciphertext = bytes.fromhex(data.get('ciphertext'))
+        ciphertext = bytes.fromhex(ciphertext)
         print(ciphertext)
         text = ecc_decrypt(private_key, ciphertext)
         print(text)
         return ecc_decrypt(private_key, ciphertext).decode()
+    # 使用异常处理机制
     else:
-        return "Unsupported algorithm"
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
 
 # Route handling
 @app.route('/encrypt', methods=['POST'])
 def handle_encrypt():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
-    
-    return jsonify({'ciphertext': encrypt(algorithm, data)})
+    try:
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        if not algorithm:  # 新增参数校验
+            raise ValueError("Missing required parameters")
+            
+        ciphertext = encrypt(algorithm, data)
+        return jsonify({'ciphertext': ciphertext})
+        
+    except ValueError as e:  # 捕获错误
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Encryption error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/decrypt', methods=['POST'])
 def handle_decrypt():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
-
-    return jsonify({'plaintext': decrypt(algorithm, data)})
+    try:
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        if not algorithm:  # 新增参数校验
+            raise ValueError("Missing required parameters")
+            
+        plaintext = decrypt(algorithm, data)
+        return jsonify({'plaintext': plaintext})
+        
+    except ValueError as e:  # 捕获错误
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Decryption error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
     
 @app.route('/hash', methods=['POST'])
 def handle_hash():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
-    plaintext = data.get('plaintext')
-    return jsonify({'hash': hash_algorithm(algorithm, plaintext)})
+    try:
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        plaintext = data.get('plaintext')
+        
+        if not all([algorithm, plaintext]):
+            raise ValueError("Missing required parameters")
+            
+        hash_result = hash_algorithm(algorithm, plaintext)
+        return jsonify({'hash': hash_result})
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Hash processing error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/encode', methods=['POST'])
 def handle_encode():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
-    plaintext = data.get('plaintext')
-    return jsonify({'encoded': encode_algorithm(algorithm, plaintext)})
+    try:        
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        plaintext = data.get('plaintext')
+
+        if not all([algorithm, plaintext]):
+            raise ValueError("Missing required parameters")
+        
+        encode_result = encode_algorithm(algorithm, plaintext)
+        return jsonify({'encoded': encode_result})
+    
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Encode processing error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/decode', methods=['POST'])
 def handle_decode():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
-    ciphertext = data.get('ciphertext')
-    return jsonify({'decoded': decode_algorithm(algorithm, ciphertext)})
+    try:        
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        ciphertext = data.get('ciphertext')
+
+        if not all([algorithm, ciphertext]):
+            raise ValueError("Missing required parameters")
+        
+        decode_result = decode_algorithm(algorithm, ciphertext)
+        return jsonify({'decoded': decode_result})
+    
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Decode processing error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/generate', methods=['POST'])
 def handle_generate():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
+    try: 
+        data = request.get_json()
+        algorithm = data.get('algorithm')
 
-    if algorithm == "RSA" or algorithm == "RSA-SHA1":
-        return jsonify(generate_rsa_key())
-    elif algorithm == "ECC":
-        return jsonify(generate_ecc_key())
-    elif algorithm == "ECDSA":
-        return jsonify(generate_ecdsa_key())
+        if not algorithm:
+            raise ValueError("Missing required parameter: algorithm")
+        
+        if algorithm == "RSA" or algorithm == "RSA-SHA1":
+            return jsonify(generate_rsa_key())
+        elif algorithm == "ECC":
+            return jsonify(generate_ecc_key())
+        elif algorithm == "ECDSA":
+            return jsonify(generate_ecdsa_key())
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}") 
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Generate processing error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/sign', methods=['POST'])
 def handle_sign():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
-
-    if algorithm == "RSA-SHA1":
+    try:
+        data = request.get_json()
+        algorithm = data.get('algorithm')
         private_key = data.get('privatekey')
         plaintext = data.get('plaintext')
-        return jsonify({'signature': rsa_sha1_sign(private_key, plaintext)})
-    elif algorithm == "ECDSA":
-        private_key = data.get('privatekey')
-        plaintext = data.get('plaintext')
-        return jsonify({'signature': ecdsa_sign(private_key, plaintext)})
+        if not all([algorithm, private_key, plaintext]):
+            raise ValueError("Missing required parameters")
+        
+        if algorithm == "RSA-SHA1":
+            return jsonify({'signature': rsa_sha1_sign(private_key, plaintext)})
+        elif algorithm == "ECDSA":
+            return jsonify({'signature': ecdsa_sign(private_key, plaintext)})
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}") 
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Sign processing error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/verify', methods=['POST'])
 def handle_verify():
-    data = request.get_json()
-    algorithm = data.get('algorithm')
+    try: 
+        data = request.get_json()
+        algorithm = data.get('algorithm')
+        public_key = data.get('publickey')
+        plaintext = data.get('plaintext')
+        signature = data.get('signature')
 
-    if algorithm == "RSA-SHA1":
-        public_key = data.get('publickey')
-        plaintext = data.get('plaintext')
-        signature = data.get('signature')
-        return jsonify({'result': rsa_sha1_verify(public_key, plaintext, signature)})
-    elif algorithm == "ECDSA":
-        public_key = data.get('publickey')
-        plaintext = data.get('plaintext')
-        signature = data.get('signature')
-        return jsonify({'result': ecdsa_verify(public_key, plaintext, signature)})
+        if not all([algorithm, public_key, plaintext, signature]):
+            raise ValueError("Missing required parameters")
+        if algorithm == "RSA-SHA1":
+            return jsonify({'result': rsa_sha1_verify(public_key, plaintext, signature)})
+        elif algorithm == "ECDSA":
+            return jsonify({'result': ecdsa_verify(public_key, plaintext, signature)})
+        else:
+            raise ValueError(f"Unsupported algorithm: {algorithm}") 
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Verify processing error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 # Run the app
 if __name__ == '__main__':

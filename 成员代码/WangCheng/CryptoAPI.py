@@ -335,9 +335,10 @@ def decrypt(algorithm, data):
             backend=default_backend()
         )
         ciphertext = bytes.fromhex(data.get('ciphertext'))
-        print(ciphertext)
+        # 删除了可能是测试使用的部分代码
+        # print(ciphertext)
         text = ecc_decrypt(private_key, ciphertext)
-        print(text)
+        # print(text)
         return ecc_decrypt(private_key, ciphertext).decode()
     else:
         return "Unsupported algorithm"
